@@ -1,0 +1,123 @@
+data:
+  AzureWebJobsStorage: VXNlRGV2ZWxvcG1lbnRTdG9yYWdlPXRydWU=
+  FUNCTIONS_WORKER_RUNTIME: cHl0aG9u
+  MyDbConnection: ''
+apiVersion: v1
+kind: Secret
+metadata:
+  name: akscluster
+---
+data:
+  host.master: YXNSZTA0a2tXSi9HMm1PcWM5amh3alpJY2I0c2RhZmRleThVZ1E5QzF6NXVuU2Q5VUFhTlh3PT0=
+  host.function.default: UHliRU5vZkcyMFVRV0xCc3JVdDJOaWtQU3Z2YWtrR1Btc1hIZzh0V1lmMHA1LzJkR05NQ1ZRPT0=
+  host.systemKey.default: Ty9XRjhreWdGM1paaERmZUZjNTg1bzE4akNTQW5HRE9XVDY0MXMxZnZNOW1IZFJhYWJKcHZRPT0=
+  functions.getnote.default: bXFYdWw1Slkybm1ialVwVFhPWkFKazBhdjlCbFZXMmpWWHlicW03czYxTVpTelJ2SlVaY2dBPT0=
+  functions.getnotes.default: Q2ZEdFJXUE5KWGVqaWE3eDVWU0hCSFEvMU9WSUw3T2hFeVZienl5aFVIWE5XRURZN2JpOUVRPT0=
+apiVersion: v1
+kind: Secret
+metadata:
+  name: func-keys-kube-secret-akscluster
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: akscluster-function-keys-identity-svc-act
+---
+rules:
+- apiGroups:
+  - ''
+  resources:
+  - secrets
+  - configMaps
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: functions-keys-manager-role
+---
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: functions-keys-manager-role
+subjects:
+- kind: ServiceAccount
+  name: akscluster-function-keys-identity-svc-act
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: akscluster-function-keys-identity-svc-act-functions-keys-manager-rolebinding
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: akscluster-http
+spec:
+  selector:
+    app: akscluster-http
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 80
+  type: LoadBalancer
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: akscluster-http
+  labels:
+    app: akscluster-http
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: akscluster-http
+  template:
+    metadata:
+      labels:
+        app: akscluster-http
+    spec:
+      containers:
+      - name: akscluster-http
+        image: containerregistryalb.azurecr.io/myfirstgetnotes:v1
+        ports:
+        - containerPort: 80
+        env:
+        - name: AzureFunctionsJobHost__functions__0
+          value: getNote
+        - name: AzureFunctionsJobHost__functions__1
+          value: getNotes
+        - name: AzureWebJobsSecretStorageType
+          value: kubernetes
+        - name: AzureWebJobsKubernetesSecretName
+          value: secrets/func-keys-kube-secret-akscluster
+        envFrom:
+        - secretRef:
+            name: akscluster
+        readinessProbe:
+          failureThreshold: 3
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 240
+          httpGet:
+            path: /
+            port: 80
+            scheme: HTTP
+        startupProbe:
+          failureThreshold: 3
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 240
+          httpGet:
+            path: /
+            port: 80
+            scheme: HTTP
+      serviceAccountName: akscluster-function-keys-identity-svc-act
+---
+
